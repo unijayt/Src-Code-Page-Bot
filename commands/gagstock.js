@@ -204,8 +204,4 @@ module.exports = {
       }
     }
 
-    sessionData.interval = setInterval(fetchAll, 10 * 1000);
-    activeSessions.set(senderId, sessionData);
-    await fetchAll();
-  }
-};
+    sessionData.interval = setInterval(fetchAll, 5 * 60 * 1000); //
