@@ -27,26 +27,22 @@ function getNextRestocks() {
   const now = getPHTime();
   const timers = {};
 
-  
   const nextEgg = new Date(now);
   nextEgg.setMinutes(now.getMinutes() < 30 ? 30 : 0);
   if (now.getMinutes() >= 30) nextEgg.setHours(now.getHours() + 1);
   nextEgg.setSeconds(0, 0);
   timers.egg = getCountdown(nextEgg);
 
-  
   const next5 = new Date(now);
   const nextM = Math.ceil((now.getMinutes() + (now.getSeconds() > 0 ? 1 : 0)) / 5) * 5;
   next5.setMinutes(nextM === 60 ? 0 : nextM, 0, 0);
   if (nextM === 60) next5.setHours(now.getHours() + 1);
   timers.gear = timers.seed = getCountdown(next5);
 
-  
   const nextHour = new Date(now);
   nextHour.setHours(now.getHours() + 1, 0, 0, 0);
   timers.honey = getCountdown(nextHour);
 
-  
   const next7 = new Date(now);
   const totalHours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
   const next7h = Math.ceil(totalHours / 7) * 7;
@@ -55,7 +51,6 @@ function getNextRestocks() {
 
   return timers;
 }
-
 
 function formatValue(val) {
   if (val >= 1_000_000) return `x${(val / 1_000_000).toFixed(1)}M`;
@@ -111,13 +106,41 @@ module.exports = {
 
     async function fetchAll() {
       try {
-        const [allStockRes, weatherRes] = await Promise.all([
-          axios.get("http://65.108.103.151:22377/api/stocks?type=all"),
-          axios.get("https://growagardenstock.com/api/stock/weather")
-        ]);
+        let stockData, weather;
 
-        const stockData = allStockRes.data;
-        const weather = weatherRes.data;
+        try {
+          const [stockRes, weatherRes] = await Promise.all([
+            axios.get("http://65.108.103.151:22377/api/stocks?type=all"),
+            axios.get("https://growagardenstock.com/api/stock/weather")
+          ]);
+          stockData = stockRes.data.result;
+          weather = weatherRes.data;
+        } catch (mainErr) {
+          console.warn(`⚠️ Main API failed. Using backup...`);
+
+          const backupRes = await axios.get("https://gagstock-2h68.onrender.com/grow-a-garden");
+          if (!backupRes.data?.data) throw new Error("Invalid backup response");
+
+          const backup = backupRes.data.data;
+
+          const transform = (items) =>
+            items?.map(i => ({ name: i.name, emoji: "", value: Number(i.quantity) })) || [];
+
+          stockData = {
+            gearStock: transform(backup.gear.items),
+            seedsStock: transform(backup.seed.items),
+            eggStock: transform(backup.egg.items),
+            cosmeticsStock: transform(backup.cosmetics.items),
+            honeyStock: transform(backup.honey.items)
+          };
+
+          weather = {
+            currentWeather: "Unknown",
+            icon: "🌤️",
+            cropBonuses: "Unknown",
+            updatedAt: backup.updated_at || backup.updatedAt || new Date().toISOString()
+          };
+        }
 
         const combinedKey = JSON.stringify({
           gearStock: stockData.gearStock,
@@ -147,16 +170,23 @@ module.exports = {
         const cosmeticsList = formatList(stockData.cosmeticsStock);
         const honeyList = formatList(stockData.honeyStock);
 
+        const updatedAtPH = getPHTime().toLocaleString("en-PH", {
+          hour: "numeric",
+          minute: "numeric",
+          second: "numeric",
+          hour12: true,
+          day: "2-digit",
+          month: "short",
+          year: "numeric"
+        });
+
         const weatherDetails =
           `🌤️ 𝗪𝗲𝗮𝘁𝗵𝗲𝗿: ${weather.icon || "🌦️"} ${weather.currentWeather}\n` +
-          `📖 Description: ${weather.description}\n` +
-          `📌 Effect: ${weather.effectDescription}\n` +
-          `🪄 Crop Bonus: ${weather.cropBonuses}\n` +
-          `📢 Visual Cue: ${weather.visualCue}\n` +
-          `🌟 Rarity: ${weather.rarity}`;
+          `🌾 Crop Bonus: ${weather.cropBonuses}\n` +
+          `📅 Updated at (Philippines): ${updatedAtPH}`;
 
         const message =
-          `🌾 𝗚𝗿𝗼𝘄 𝗔 𝗚𝗮𝗿𝗱𝗲𝗻 — 𝗧𝗿𝗮𝗰𝗸𝗲𝗿\n\n` +
+          `🌾 𝗚𝗿𝗼𝘄 𝗔 𝗚𝗮𝗿𝗱𝗲𝗻 — 𝗧𝗿𝗮𝗰𝗸𝗲𝗿 • BY JAY AR\n\n` +
           `🛠️ 𝗚𝗲𝗮𝗿:\n${gearList}\n⏳ Restock in: ${restocks.gear}\n\n` +
           `🌱 𝗦𝗲𝗲𝗱𝘀:\n${seedList}\n⏳ Restock in: ${restocks.seed}\n\n` +
           `🥚 𝗘𝗴𝗴𝘀:\n${eggList}\n⏳ Restock in: ${restocks.egg}\n\n` +
