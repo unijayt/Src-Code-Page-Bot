@@ -133,7 +133,7 @@ const { data } = await axios.post("https://newapplication-70381.chipp.ai/api/cha
             answerText = toolCall.result.organic.map(o => o.snippet).filter(Boolean).join('\n\n');
           }
 
-          const finalReply = `💬 | 𝙼𝚘𝚌𝚑𝚊 𝙰𝚒\n・───────────・\n${fullResponseText}\n\nBrowse result:\n${answerText}\n・──── >ᴗ< ────・`;
+          const finalReply = `💬 | JayStockAI\n・───────────・\n${fullResponseText}\n\nBrowse result:\n${answerText}\n・──── >ᴗ< ────・`;
           await sendMessage(senderId, { text: finalReply }, pageAccessToken);
           return;
         }
