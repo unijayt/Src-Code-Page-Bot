@@ -47,12 +47,18 @@ module.exports = {
     sendMessage(
       senderId,
       { text: `━━━━━━━━━━━━━━
+OWNER: JAY AR
+
 𝙰𝚟𝚊𝚒𝚕𝚊𝚋𝚕𝚎 𝙲𝚘𝚖𝚖𝚊𝚗𝚍𝚜:
 ╭─╼━━━━━━━━╾─╮
 ${commandsList}
 ╰─━━━━━━━━━╾─╯
 Chat -help [name] 
 to see command details.
+
+•|Type " gagstock on • gagstock off •|
+° IF YOU COUNTER A MISS STOCK PLEASE CONTACT THIS USER
+: m.me/61552691907450
 ━━━━━━━━━━━━━━` },
       pageAccessToken
     );
