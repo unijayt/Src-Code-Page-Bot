@@ -137,8 +137,8 @@ module.exports = {
     async function fetchAndNotify(alwaysSend = false) {
       try {
         const [stockRes, weatherRes] = await Promise.all([
-          fetchWithTimeout("https://gagstock.gleeze.com/grow-a-garden"),
-          fetchWithTimeout("https://growagardenstock.com/api/stock/weather"),
+          fetchWithTimeout("https://vmi2625091.contaboserver.net/api/stocks"),
+          fetchWithTimeout("https://vmi2625091.contaboserver.net/api/weather"),
         ]);
 
         const backup = stockRes.data.data;
