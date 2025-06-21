@@ -1,12 +1,18 @@
 const { sendMessage } = require("../handles/sendMessage");
+const WebSocket = require("ws");
 const axios = require("axios");
+
 const activeSessions = new Map();
 const lastSentCache = new Map();
 const PH_TIMEZONE = "Asia/Manila";
 
-function pad(n) { return n < 10 ? "0" + n : n; }
+function pad(n) {
+  return n < 10 ? "0" + n : n;
+}
 
-function getPHTime() { return new Date(new Date().toLocaleString("en-US", { timeZone: PH_TIMEZONE })); }
+function getPHTime() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: PH_TIMEZONE }));
+}
 
 function getCountdown(target) {
   const now = getPHTime();
@@ -21,6 +27,7 @@ function getCountdown(target) {
 function getNextRestocks() {
   const now = getPHTime();
   const timers = {};
+
   const nextEgg = new Date(now);
   nextEgg.setMinutes(now.getMinutes() < 30 ? 30 : 0);
   if (now.getMinutes() >= 30) nextEgg.setHours(now.getHours() + 1);
@@ -33,25 +40,19 @@ function getNextRestocks() {
   if (nextM === 60) next5.setHours(now.getHours() + 1);
   timers.gear = timers.seed = getCountdown(next5);
 
-  const nextHour = new Date(now);
-  nextHour.setHours(now.getHours() + 1, 0, 0, 0);
-  timers.honey = getCountdown(nextHour);
+  const nextHoney = new Date(now);
+  nextHoney.setMinutes(now.getMinutes() < 30 ? 30 : 0);
+  if (now.getMinutes() >= 30) nextHoney.setHours(now.getHours() + 1);
+  nextHoney.setSeconds(0, 0);
+  timers.honey = getCountdown(nextHoney);
 
   const next7 = new Date(now);
   const totalHours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
   const next7h = Math.ceil(totalHours / 7) * 7;
   next7.setHours(next7h, 0, 0, 0);
   timers.cosmetics = getCountdown(next7);
-  return timers;
-}
 
-function getNextScheduledTime(startTime = getPHTime()) {
-  const base = new Date(startTime);
-  const min = base.getMinutes();
-  const next5 = Math.floor(min / 5) * 5 + 5;
-  base.setMinutes(next5, 30, 0);
-  if (base <= startTime) base.setMinutes(base.getMinutes() + 5);
-  return base;
+  return timers;
 }
 
 function formatValue(val) {
@@ -62,43 +63,21 @@ function formatValue(val) {
 
 function addEmoji(name) {
   const emojis = {
-    "Common Egg": "🥚", "Uncommon Egg": "🐣", "Rare Egg": "🍳", "Legendary Egg": "🪺", "Mythical Egg": "🥚", "Bug Egg": "🪲",
-    "Watering Can": "🚿", "Trowel": "🛠️", "Recall Wrench": "🔧", "Basic Sprinkler": "💧", "Advanced Sprinkler": "💦", "Godly Sprinkler": "⛲",
-    "Lightning Rod": "⚡", "Master Sprinkler": "🌊", "Favorite Tool": "❤️", "Harvest Tool": "🌾",
-    "Carrot": "🥕", "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷", "Tomato": "🍅", "Corn": "🌽", "Daffodil": "🌼",
-    "Watermelon": "🍉", "Pumpkin": "🎃", "Apple": "🍎", "Bamboo": "🎍", "Coconut": "🥥", "Cactus": "🌵", "Dragon Fruit": "🍈",
-    "Mango": "🥭", "Grape": "🍇", "Mushroom": "🍄", "Pepper": "🌶️", "Cacao": "🍫", "Beanstalk": "🌱"
+    "Common Egg": "🥚", "Uncommon Egg": "🐣", "Rare Egg": "🍳", "Legendary Egg": "🪺", "Mythical Egg": "🔮",
+    "Bug Egg": "🪲", "Cleaning Spray": "🧴", "Friendship Pot": "🪴", "Watering Can": "🚿", "Trowel": "🛠️",
+    "Recall Wrench": "🔧", "Basic Sprinkler": "💧", "Advanced Sprinkler": "💦", "Godly Sprinkler": "⛲",
+    "Lightning Rod": "⚡", "Master Sprinkler": "🌊", "Favorite Tool": "❤️", "Harvest Tool": "🌾", "Carrot": "🥕",
+    "Strawberry": "🍓", "Blueberry": "🫐", "Orange Tulip": "🌷", "Tomato": "🍅", "Corn": "🌽", "Daffodil": "🌼",
+    "Watermelon": "🍉", "Pumpkin": "🎃", "Apple": "🍎", "Bamboo": "🎍", "Coconut": "🥥", "Cactus": "🌵",
+    "Dragon Fruit": "🍈", "Mango": "🥭", "Grape": "🍇", "Mushroom": "🍄", "Pepper": "🌶️", "Cacao": "🍫",
+    "Beanstalk": "🌱", "Ember Lily": "🏵️", "Sugar Apple": "🍏"
   };
   return `${emojis[name] || ""} ${name}`;
 }
 
-function normalizeStockData(stockData) {
-  const transform = (arr) => arr.map((i) => ({ name: i.name, value: i.value }));
-  return {
-    gearStock: transform(stockData.gearStock),
-    seedsStock: transform(stockData.seedsStock),
-    eggStock: transform(stockData.eggStock),
-    honeyStock: transform(stockData.honeyStock),
-    cosmeticsStock: transform(stockData.cosmeticsStock),
-  };
-}
-
-async function fetchWithTimeout(url, options = {}, timeout = 5000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await axios.get(url, { ...options, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
-  }
-}
-
 module.exports = {
   name: "gagstock",
-  description: "Track Grow A Garden stock including cosmetics and restocks.",
+  description: "Track Grow A Garden stock using WebSocket live updates.",
   usage: "gagstock on | gagstock on Sunflower | Watering Can | gagstock off",
   category: "Tools ⚒️",
 
@@ -109,7 +88,9 @@ module.exports = {
     if (action === "off") {
       const session = activeSessions.get(senderId);
       if (session) {
-        clearTimeout(session.timeout);
+        clearInterval(session.keepAlive);
+        session.closed = true;
+        session.ws?.terminate();
         activeSessions.delete(senderId);
         lastSentCache.delete(senderId);
         return await sendMessage(senderId, { text: "🛑 Gagstock tracking stopped." }, pageAccessToken);
@@ -120,106 +101,109 @@ module.exports = {
 
     if (action !== "on") {
       return await sendMessage(senderId, {
-        text: "📌 Usage:\n• gagstock on\n• gagstock on Sunflower | Watering Can\n• gagstock off",
+        text: "📌 Usage:\n• gagstock on\n• gagstock on Sunflower | Watering Can\n• gagstock off"
       }, pageAccessToken);
     }
 
     if (activeSessions.has(senderId)) {
       return await sendMessage(senderId, {
-        text: "📡 You're already tracking Gagstock. Use gagstock off to stop.",
+        text: "📡 You're already tracking Gagstock. Use gagstock off to stop."
       }, pageAccessToken);
     }
 
-    await sendMessage(senderId, { text: "✅ Gagstock tracking started! You'll be notified when stock or weather changes." }, pageAccessToken);
+    await sendMessage(senderId, { text: "✅ Gagstock tracking started via WebJay!" }, pageAccessToken);
 
-    const isFirstFetch = true;
+    let ws;
+    let keepAliveInterval;
 
-    async function fetchAndNotify(alwaysSend = false) {
-      try {
-        const [stockRes, weatherRes] = await Promise.all([
-          fetchWithTimeout("https://gagstock.gleeze.com/grow-a-garden"),
-          fetchWithTimeout("https://growagardenstock.com/api/stock/weather"),
-        ]);
+    function connectWebSocket() {
+      ws = new WebSocket("wss://gagstock.gleeze.com");
 
-        const backup = stockRes.data.data;
-        const stockData = {
-          gearStock: backup.gear.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
-          seedsStock: backup.seed.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
-          eggStock: backup.egg.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
-          cosmeticsStock: backup.cosmetics.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
-          honeyStock: backup.honey.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
-        };
-
-        const weather = {
-          currentWeather: weatherRes.data.currentWeather || "Unknown",
-          icon: weatherRes.data.icon || "🌤️",
-          cropBonuses: weatherRes.data.cropBonuses || "None",
-          updatedAt: weatherRes.data.updatedAt || new Date().toISOString(),
-        };
-
-        const restocks = getNextRestocks();
-        const formatList = (arr) => arr.map(i => `- ${addEmoji(i.name)}: ${formatValue(i.value)}`).join("\n");
-        const updatedAtPH = getPHTime().toLocaleString("en-PH", {
-          hour: "numeric", minute: "numeric", second: "numeric", hour12: true, day: "2-digit", month: "short", year: "numeric"
-        });
-
-        let filteredContent = "";
-        let matched = 0;
-
-        const addSection = (label, items, restock) => {
-          const filtered = filters.length ? items.filter(i => filters.some(f => i.name.toLowerCase().includes(f))) : items;
-          if (label === "🛠️ 𝗚𝗲𝗮𝗿" || label === "🌱 𝗦𝗲𝗲𝗱𝘀") {
-            if (filtered.length > 0) {
-              matched += filtered.length;
-              filteredContent += `${label}:\n${formatList(filtered)}\n⏳ Restock In: ${restock}\n\n`;
-            }
-          } else {
-            filteredContent += `${label}:\n${formatList(items)}\n⏳ Restock In: ${restock}\n\n`;
+      ws.on("open", () => {
+        keepAliveInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send("ping");
           }
-        };
+        }, 10000);
+      });
 
-        addSection("🛠️ 𝗚𝗲𝗮𝗿", stockData.gearStock, restocks.gear);
-        addSection("🌱 𝗦𝗲𝗲𝗱𝘀", stockData.seedsStock, restocks.seed);
-        addSection("🥚 𝗘𝗴𝗴𝘀", stockData.eggStock, restocks.egg);
-        addSection("🎨 𝗖𝗼𝘀𝗺𝗲𝘁𝗶𝗰𝘀", stockData.cosmeticsStock, restocks.cosmetics);
-        addSection("🍯 𝗛𝗼𝗻𝗲𝘆", stockData.honeyStock, restocks.honey);
+      ws.on("message", async (data) => {
+        try {
+          const payload = JSON.parse(data);
+          if (payload.status !== "success") return;
 
-        const currentKey = JSON.stringify({ gearStock: stockData.gearStock, seedsStock: stockData.seedsStock });
-        const lastSent = lastSentCache.get(senderId);
-        if (!alwaysSend && lastSent === currentKey) return false;
-        lastSentCache.set(senderId, currentKey);
+          const backup = payload.data;
+          const stockData = {
+            gearStock: backup.gear.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
+            seedsStock: backup.seed.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
+            eggStock: backup.egg.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
+            cosmeticsStock: backup.cosmetics.items.map(i => ({ name: i.name, value: Number(i.quantity) })),
+            honeyStock: backup.honey.items.map(i => ({ name: i.name, value: Number(i.quantity) }))
+          };
 
-        if (matched === 0) return false;
+          const currentKey = JSON.stringify({
+            gearStock: stockData.gearStock,
+            seedsStock: stockData.seedsStock
+          });
 
-        const message = `🌾 𝗚𝗿𝗼𝘄 𝗔 𝗚𝗮𝗿𝗱𝗲𝗻 — 𝗧𝗿𝗮𝗰𝗸𝗲𝗿 By : Jay Ar\n\n${filteredContent}🌤️ 𝗪𝗲𝗮𝘁𝗵𝗲𝗿: ${weather.icon} ${weather.currentWeather}\n🌾 Crop Bonus: ${weather.cropBonuses}\n📅 Updated at (Philippines): ${updatedAtPH}`;
+          const lastSent = lastSentCache.get(senderId);
+          if (lastSent === currentKey) return;
+          lastSentCache.set(senderId, currentKey);
 
-        await sendMessage(senderId, { text: message }, pageAccessToken);
-        return true;
+          const restocks = getNextRestocks();
+          const formatList = (arr) => arr.map(i => `- ${addEmoji(i.name)}: ${formatValue(i.value)}`).join("\n");
 
-      } catch {
-        return false;
-      }
+          let filteredContent = "";
+          let matched = 0;
+
+          const addSection = (label, items, restock) => {
+            const filtered = filters.length ? items.filter(i => filters.some(f => i.name.toLowerCase().includes(f))) : items;
+            if (label === "🛠️ 𝗚𝗲𝗮𝗿" || label === "🌱 𝗦𝗲𝗲𝗱𝘀") {
+              if (filtered.length > 0) {
+                matched += filtered.length;
+                filteredContent += `${label}:\n${formatList(filtered)}\n⏳ Restock In: ${restock}\n\n`;
+              }
+            } else {
+              filteredContent += `${label}:\n${formatList(items)}\n⏳ Restock In: ${restock}\n\n`;
+            }
+          };
+
+          addSection("🛠️ 𝗚𝗲𝗮𝗿", stockData.gearStock, restocks.gear);
+          addSection("🌱 𝗦𝗲𝗲𝗱𝘀", stockData.seedsStock, restocks.seed);
+          addSection("🥚 𝗘𝗴𝗴𝘀", stockData.eggStock, restocks.egg);
+          addSection("🎨 𝗖𝗼𝘀𝗺𝗲𝘁𝗶𝗰𝘀", stockData.cosmeticsStock, restocks.cosmetics);
+          addSection("🍯 𝗛𝗼𝗻𝗲𝘆", stockData.honeyStock, restocks.honey);
+
+          if (matched === 0 && filters.length > 0) return;
+
+          const updatedAtPH = getPHTime().toLocaleString("en-PH", {
+            hour: "numeric", minute: "numeric", second: "numeric",
+            hour12: true, day: "2-digit", month: "short", year: "numeric"
+          });
+
+          const weather = await axios.get("https://growagardenstock.com/api/stock/weather").then(res => res.data).catch(() => null);
+          const weatherInfo = weather ? `🌤️ 𝗪𝗲𝗮𝘁𝗵𝗲𝗿: ${weather.icon} ${weather.weatherType}\n📋 ${weather.description}\n🎯 ${weather.cropBonuses}\n` : "";
+
+          const message = `🌾 𝗚𝗿𝗼𝘄 𝗔 𝗚𝗮𝗿𝗱𝗲𝗻 — 𝗧𝗿𝗮𝗰𝗸𝗲𝗿 By : Jay Ar\n\n${filteredContent}${weatherInfo}📅 Updated at (PH): ${updatedAtPH}`;
+
+          if (!activeSessions.has(senderId)) return;
+          await sendMessage(senderId, { text: message }, pageAccessToken);
+        } catch (e) {}
+      });
+
+      ws.on("close", () => {
+        clearInterval(keepAliveInterval);
+        const session = activeSessions.get(senderId);
+        if (session && !session.closed) setTimeout(connectWebSocket, 3000);
+      });
+
+      ws.on("error", () => {
+        ws.close();
+      });
+
+      activeSessions.set(senderId, { ws, keepAlive: keepAliveInterval, closed: false });
     }
 
-    async function runSchedule() {
-      const now = getPHTime();
-      const nextTime = getNextScheduledTime(now);
-      const wait = Math.max(nextTime - now, 1000);
-
-      const timer = setTimeout(async function trigger() {
-        const updated = await fetchAndNotify(false);
-        if (updated) {
-          runSchedule();
-        } else {
-          const retryTimer = setTimeout(trigger, 5000);
-          activeSessions.set(senderId, { timeout: retryTimer });
-        }
-      }, wait);
-
-      activeSessions.set(senderId, { timeout: timer });
-    }
-
-    await fetchAndNotify(true);
-    runSchedule();
+    connectWebSocket();
   }
 };
